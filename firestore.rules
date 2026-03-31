@@ -1,0 +1,200 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {uid}
+    // Fields:
+    //   - uid: string (required)
+    //   - displayName: string (required)
+    //   - photoURL: string (optional)
+    //   - email: string (optional)
+    //   - lastSeen: timestamp (required)
+    //   - role: string (optional, ['owner', 'admin', 'friend', 'farzi', 'user'])
+    //   - isBanned: bool (optional)
+    //
+    // Collection: rooms
+    // Document ID: {roomId}
+    // Fields:
+    //   - id: string (required)
+    //   - name: string (required, 1-50 chars)
+    //   - description: string (optional, < 200 chars)
+    //   - password: string (optional, < 100 chars)
+    //   - createdBy: string (required, UID)
+    //   - createdAt: timestamp (required)
+    //   - members: list (required, UIDs)
+    //
+    // Collection: rooms/{roomId}/messages
+    // Document ID: {messageId}
+    // Fields:
+    //   - id: string (required)
+    //   - roomId: string (required)
+    //   - senderId: string (required, UID)
+    //   - senderName: string (required)
+    //   - senderPhoto: string (optional)
+    //   - text: string (required, 1-2000 chars)
+    //   - createdAt: timestamp (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isNotBanned() {
+      return isAuthenticated() && 
+        (!exists(/databases/$(database)/documents/users/$(request.auth.uid)) || 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isBanned', false) == false);
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') in ['admin', 'owner'] ||
+          (request.auth.token.email.lower() == "manasyadav547879@gmail.com"));
+    }
+    
+    function isOwnerRole() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') == 'owner' ||
+          (request.auth.token.email.lower() == "manasyadav547879@gmail.com"));
+    }
+    
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+    
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+    
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasRequiredFields(['uid', 'displayName', 'lastSeen']) &&
+             data.uid == request.auth.uid &&
+             (request.method == 'create' || data.uid == resource.data.uid) &&
+             data.displayName is string && data.displayName.size() > 0 && data.displayName.size() < 100 &&
+             (!('email' in data) || isValidEmail(data.email)) &&
+             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() < 2000)) &&
+             (!('role' in data) || (data.role is string && data.role in ['owner', 'admin', 'friend', 'farzi', 'user'])) &&
+             (!('isBanned' in data) || data.isBanned is bool) &&
+             data.lastSeen is timestamp;
+    }
+
+    function isValidRoom(data) {
+      return hasRequiredFields(['name', 'createdBy', 'createdAt', 'members']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 50 &&
+             (!('description' in data) || (data.description is string && data.description.size() < 200)) &&
+             (!('password' in data) || (data.password is string && data.password.size() < 100)) &&
+             data.createdBy == request.auth.uid &&
+             (request.method == 'create' || data.createdBy == resource.data.createdBy) &&
+             (data.createdAt is timestamp || data.createdAt == request.time) &&
+             data.members is list && data.members.size() > 0 && request.auth.uid in data.members;
+    }
+
+    function isValidMessage(data, roomId) {
+      return hasRequiredFields(['roomId', 'senderId', 'senderName', 'text', 'createdAt']) &&
+             data.roomId == roomId &&
+             data.senderId == request.auth.uid &&
+             (request.method == 'create' || data.senderId == resource.data.senderId) &&
+             data.senderName is string && data.senderName.size() > 0 &&
+             data.text is string && data.text.size() >= 0 && data.text.size() < 2000 &&
+             data.createdAt is timestamp &&
+             (!('fileUrl' in data) || (data.fileUrl is string && data.fileUrl.size() < 2000)) &&
+             (!('fileName' in data) || (data.fileName is string && data.fileName.size() < 200)) &&
+             (!('fileType' in data) || (data.fileType is string && data.fileType.size() < 100)) &&
+             (!('isImage' in data) || data.isImage is bool);
+    }
+
+    function isValidCall(data) {
+      return hasRequiredFields(['callerId', 'receiverId', 'status', 'type', 'roomId', 'createdAt']) &&
+             data.callerId is string && data.receiverId is string &&
+             data.status in ['ringing', 'accepted', 'rejected', 'ended'] &&
+             data.type in ['voice', 'video'] &&
+             data.roomId is string &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidFriendship(data) {
+      return hasRequiredFields(['requesterId', 'receiverId', 'status', 'createdAt']) &&
+             data.requesterId is string && data.receiverId is string &&
+             data.status in ['pending', 'accepted'] &&
+             data.createdAt is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    // User profiles
+    match /users/{uid} {
+      allow read: if isAuthenticated() && isNotBanned();
+      allow create: if isOwner(uid) && isValidUser(request.resource.data);
+      allow update: if (isOwner(uid) && isValidUser(request.resource.data) && 
+                      (!('role' in request.resource.data) || request.resource.data.role == resource.data.get('role', 'user') || isOwnerRole()) &&
+                      (!('isBanned' in request.resource.data) || request.resource.data.isBanned == resource.data.get('isBanned', false) || isOwnerRole())) || 
+                      (isAdmin() && isValidUser(request.resource.data) && 
+                       (resource.data.get('role', 'user') != 'owner' || isOwnerRole()) &&
+                       (resource.data.get('role', 'user') != 'admin' || isOwnerRole() || isOwner(uid)));
+      allow delete: if isOwnerRole();
+    }
+
+    // Chat rooms
+    match /rooms/{roomId} {
+      allow read: if isAuthenticated() && isNotBanned();
+      allow create: if isAuthenticated() && isNotBanned() && isValidRoom(request.resource.data);
+      allow update: if isAuthenticated() && isNotBanned() && isValidRoom(request.resource.data) && 
+                      (request.resource.data.createdBy == resource.data.createdBy || isAdmin());
+      allow delete: if isAuthenticated() && isNotBanned() && (resource.data.createdBy == request.auth.uid || isAdmin());
+      
+      // Messages subcollection
+      match /messages/{messageId} {
+        allow read: if isAuthenticated() && isNotBanned();
+        allow create: if isAuthenticated() && isNotBanned() && isValidMessage(request.resource.data, roomId);
+        allow update: if isAuthenticated() && isNotBanned() && isValidMessage(request.resource.data, roomId) &&
+                        (resource.data.senderId == request.auth.uid || isAdmin());
+        allow delete: if isAuthenticated() && isNotBanned() && (resource.data.senderId == request.auth.uid || isAdmin());
+      }
+    }
+
+    // Calls
+    match /calls/{callId} {
+      allow read: if isAuthenticated() && isNotBanned() && (request.auth.uid == resource.data.callerId || request.auth.uid == resource.data.receiverId);
+      allow create: if isAuthenticated() && isNotBanned() && isValidCall(request.resource.data) && request.resource.data.callerId == request.auth.uid;
+      allow update: if isAuthenticated() && isNotBanned() && (request.auth.uid == resource.data.callerId || request.auth.uid == resource.data.receiverId);
+      allow delete: if isAuthenticated() && isNotBanned() && (request.auth.uid == resource.data.callerId || request.auth.uid == resource.data.receiverId);
+    }
+
+    // Friendships
+    match /friendships/{friendshipId} {
+      allow read: if isAuthenticated() && isNotBanned() && (request.auth.uid == resource.data.requesterId || request.auth.uid == resource.data.receiverId);
+      allow create: if isAuthenticated() && isNotBanned() && isValidFriendship(request.resource.data) && request.resource.data.requesterId == request.auth.uid;
+      allow update: if isAuthenticated() && isNotBanned() && (request.auth.uid == resource.data.receiverId && request.resource.data.status == 'accepted');
+      allow delete: if isAuthenticated() && isNotBanned() && (request.auth.uid == resource.data.requesterId || request.auth.uid == resource.data.receiverId);
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

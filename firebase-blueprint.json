@@ -1,0 +1,130 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Stores user information and online status.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Unique user ID" },
+        "displayName": { "type": "string", "description": "User's display name" },
+        "photoURL": { "type": "string", "description": "User's photo URL" },
+        "email": { "type": "string", "description": "User's email address" },
+        "role": { 
+          "type": "string", 
+          "enum": ["owner", "admin", "friend", "farzi", "user"],
+          "description": "User's rank or role in the system" 
+        },
+        "lastSeen": { "type": "string", "format": "date-time", "description": "Last time user was active" }
+      },
+      "required": ["uid", "displayName", "lastSeen"]
+    },
+    "ChatRoom": {
+      "title": "Chat Room",
+      "description": "Represents a messaging channel.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique room ID" },
+        "name": { "type": "string", "description": "Name of the room" },
+        "description": { "type": "string", "description": "Room description" },
+        "password": { "type": "string", "description": "Optional password for protected rooms" },
+        "createdBy": { "type": "string", "description": "UID of the creator" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" },
+        "members": { "type": "array", "items": { "type": "string" }, "description": "List of member UIDs" }
+      },
+      "required": ["id", "name", "createdBy", "createdAt"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A single message in a chat room or DM.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique message ID" },
+        "roomId": { "type": "string", "description": "ID of the room or DM" },
+        "senderId": { "type": "string", "description": "UID of the sender" },
+        "senderName": { "type": "string", "description": "Name of the sender" },
+        "senderPhoto": { "type": "string", "description": "Photo URL of the sender" },
+        "text": { "type": "string", "description": "Message content" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Message timestamp" },
+        "fileUrl": { "type": "string", "description": "URL of the attached file" },
+        "fileName": { "type": "string", "description": "Name of the attached file" },
+        "fileType": { "type": "string", "description": "MIME type of the attached file" },
+        "isImage": { "type": "boolean", "description": "Whether the file is an image" }
+      },
+      "required": ["id", "roomId", "senderId", "senderName", "text", "createdAt"]
+    },
+    "DirectMessage": {
+      "title": "Direct Message Conversation",
+      "description": "A private conversation between two users.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique DM ID" },
+        "participants": { "type": "array", "items": { "type": "string" }, "description": "UIDs of the two participants" },
+        "lastMessage": { "type": "string", "description": "Last message sent" },
+        "lastMessageAt": { "type": "string", "format": "date-time", "description": "Timestamp of the last message" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Conversation creation timestamp" }
+      },
+      "required": ["id", "participants", "createdAt"]
+    },
+    "Call": {
+      "title": "Call",
+      "description": "Represents an active or pending call.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique call ID" },
+        "callerId": { "type": "string", "description": "UID of the caller" },
+        "callerName": { "type": "string", "description": "Name of the caller" },
+        "callerPhoto": { "type": "string", "description": "Photo URL of the caller" },
+        "receiverId": { "type": "string", "description": "UID of the receiver" },
+        "status": { "type": "string", "enum": ["ringing", "accepted", "rejected", "ended"], "description": "Current call status" },
+        "type": { "type": "string", "enum": ["voice", "video"], "description": "Type of call" },
+        "roomId": { "type": "string", "description": "Jitsi room name" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Call creation timestamp" }
+      },
+      "required": ["id", "callerId", "receiverId", "status", "type", "roomId", "createdAt"]
+    },
+    "Friendship": {
+      "title": "Friendship",
+      "description": "Represents a friend request or an established friendship.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique friendship ID" },
+        "requesterId": { "type": "string", "description": "UID of the user who sent the request" },
+        "receiverId": { "type": "string", "description": "UID of the user who received the request" },
+        "participants": { "type": "array", "items": { "type": "string" }, "description": "UIDs of the two participants" },
+        "status": { "type": "string", "enum": ["pending", "accepted"], "description": "Status of the friendship" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Friendship creation timestamp" }
+      },
+      "required": ["id", "requesterId", "receiverId", "participants", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "UserProfile",
+      "description": "User profile documents"
+    },
+    "/rooms/{roomId}": {
+      "schema": "ChatRoom",
+      "description": "Chat room documents"
+    },
+    "/rooms/{roomId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Messages within a specific room"
+    },
+    "/direct_messages/{dmId}": {
+      "schema": "DirectMessage",
+      "description": "Private conversation documents"
+    },
+    "/direct_messages/{dmId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Messages within a specific private conversation"
+    },
+    "/calls/{callId}": {
+      "schema": "Call",
+      "description": "Active or pending call documents"
+    },
+    "/friendships/{friendshipId}": {
+      "schema": "Friendship",
+      "description": "Friend requests and established friendships"
+    }
+  }
+}

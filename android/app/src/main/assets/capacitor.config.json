@@ -1,0 +1,8 @@
+{
+	"appId": "com.nexuschats.app",
+	"appName": "Nexus Chat",
+	"webDir": "dist",
+	"server": {
+		"androidScheme": "https"
+	}
+}
