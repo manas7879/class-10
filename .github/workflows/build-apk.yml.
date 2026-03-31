@@ -1,0 +1,41 @@
+name: Build Android APK
+on: [push, workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Clone WebView Template
+        run: |
+          # Professional WebView Template clone kar rahe hain
+          git clone https://github.com/Suleman-D/Android-WebView-Template.git android-project
+          cd android-project
+          
+          # Aapki Vercel URL yahan fix kar di hai
+          sed -i 's|https://example.com|https://class-10-pi.vercel.app|g' app/src/main/java/com/example/webview/MainActivity.java
+          
+          # App ka naam badal kar "Class 10 App" kar diya hai
+          sed -i 's|WebView App|Class 10 App|g' app/src/main/res/values/strings.xml
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x android-project/gradlew
+
+      - name: Build APK
+        run: |
+          cd android-project
+          ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Class-10-APK
+          path: android-project/app/build/outputs/apk/debug/app-debug.apk
